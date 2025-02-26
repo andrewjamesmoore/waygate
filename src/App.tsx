@@ -4,23 +4,23 @@ import { LoginPage } from "./pages/LoginPage";
 import { FeedPage } from "./pages/FeedPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { Navigation } from "./components/Navigation";
-import "./App.css";
+import { Box, Flex } from "@chakra-ui/react";
 
 function App() {
   return (
     <NostrProvider>
       <BrowserRouter>
-        <div className='app'>
+        <Flex direction='column' minH='100vh'>
           <Navigation />
-          <main className='main-content'>
+          <Box as='main' pt='60px' flex='1'>
             <Routes>
               <Route path='/login' element={<LoginPage />} />
               <Route path='/feed' element={<FeedPage />} />
               <Route path='/settings' element={<SettingsPage />} />
               <Route path='/' element={<Navigate to='/login' replace />} />
             </Routes>
-          </main>
-        </div>
+          </Box>
+        </Flex>
       </BrowserRouter>
     </NostrProvider>
   );

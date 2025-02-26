@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { useNostr } from "../context/NostrContext";
 import { SimplePool, type UnsignedEvent, finalizeEvent } from "nostr-tools";
+import {
+  Box,
+  Button,
+  Flex,
+  Textarea,
+  useToast,
+  useColorModeValue,
+} from "@chakra-ui/react";
 
 const hexToBytes = (hex: string) => {
   const bytes = new Uint8Array(hex.length / 2);
@@ -26,15 +34,24 @@ interface CommentNoteProps {
 export const CommentNote = ({ parentId, onCommentAdded }: CommentNoteProps) => {
   const { privateKey, publicKey, profile, addComment } = useNostr();
   const [content, setContent] = useState("");
-  const [status, setStatus] = useState("");
+  const toast = useToast();
   const [isPosting, setIsPosting] = useState(false);
+  const inputBg = useColorModeValue("white", "gray.800");
+  const borderColor = useColorModeValue("gray.200", "gray.600");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!privateKey || !publicKey || !content.trim() || !parentId) return;
 
     setIsPosting(true);
-    setStatus("Posting comment...");
+    toast({
+      title: "Posting...",
+      description: "Sending your comment",
+      status: "info",
+      duration: 2000,
+      isClosable: true,
+      position: "bottom",
+    });
 
     try {
       // Create metadata for the comment
@@ -79,23 +96,41 @@ export const CommentNote = ({ parentId, onCommentAdded }: CommentNoteProps) => {
         addComment(signedEvent, parentId);
 
         setContent("");
-        setStatus("Comment posted successfully!");
+        toast({
+          title: "Success!",
+          description: "Your comment was posted successfully",
+          status: "success",
+          duration: 3000,
+          isClosable: true,
+          position: "bottom",
+        });
 
         // Notify parent component
         if (onCommentAdded) {
           onCommentAdded();
         }
-
-        setTimeout(() => setStatus(""), 3000);
       } else {
         console.error("Failed to publish comment to any relay");
-        setStatus("Failed to post comment. Please try again.");
+        toast({
+          title: "Error",
+          description: "Failed to post comment. Please try again.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+          position: "bottom",
+        });
       }
     } catch (error: unknown) {
       console.error("Failed to post comment:", error);
-      setStatus(
-        "Failed to post comment. Please check your connection and try again."
-      );
+      toast({
+        title: "Error",
+        description:
+          "Failed to post comment. Please check your connection and try again.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "bottom",
+      });
     } finally {
       setIsPosting(false);
     }
@@ -106,32 +141,43 @@ export const CommentNote = ({ parentId, onCommentAdded }: CommentNoteProps) => {
   }
 
   return (
-    <div className='comment-note'>
-      <form onSubmit={handleSubmit} className='comment-form'>
-        <div className='form-group'>
-          <textarea
+    <Box width='100%'>
+      <form onSubmit={handleSubmit}>
+        <Flex>
+          <Textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder='Write a comment...'
+            placeholder='Write a reply...'
+            size='xs'
+            resize='none'
             rows={1}
-            disabled={isPosting}
+            mr={2}
+            bg={inputBg}
+            borderColor={borderColor}
+            isDisabled={isPosting}
+            _focus={{
+              borderColor: "brand.500",
+              boxShadow: "0 0 0 1px var(--chakra-colors-brand-500)",
+            }}
+            flex='1'
+            fontSize='sm'
+            py={1}
+            minH='30px'
           />
-        </div>
-
-        <button type='submit' disabled={!content.trim() || isPosting}>
-          {isPosting ? "..." : "Reply"}
-        </button>
+          <Button
+            type='submit'
+            colorScheme='brand'
+            isLoading={isPosting}
+            loadingText='...'
+            isDisabled={!content.trim() || isPosting}
+            size='xs'
+            alignSelf='flex-end'
+            height='30px'
+          >
+            Reply
+          </Button>
+        </Flex>
       </form>
-
-      {status && (
-        <p
-          className={`status ${
-            status.includes("Failed") ? "error" : "success"
-          }`}
-        >
-          {status}
-        </p>
-      )}
-    </div>
+    </Box>
   );
 };

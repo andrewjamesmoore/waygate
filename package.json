@@ -10,11 +10,17 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@chakra-ui/icons": "^2.2.4",
+    "@chakra-ui/react": "^2.10.6",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@noble/hashes": "^1.7.1",
     "@noble/secp256k1": "^2.2.3",
+    "framer-motion": "^12.4.7",
     "nostr-tools": "^2.10.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-icons": "^5.5.0",
     "react-router-dom": "^7.2.0",
     "websocket-polyfill": "^1.0.0"
   },

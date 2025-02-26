@@ -1,13 +1,35 @@
 import { useState, useEffect, useRef } from "react";
 import { useNostr } from "../context/NostrContext";
+import {
+  Box,
+  Button,
+  FormControl,
+  FormLabel,
+  Input,
+  Textarea,
+  VStack,
+  Heading,
+  Text,
+  Avatar,
+  Center,
+  useToast,
+  useColorModeValue,
+  Flex,
+  Icon,
+} from "@chakra-ui/react";
+import { AddIcon } from "@chakra-ui/icons";
 
 export const Profile = () => {
   const { profile, updateProfile, privateKey } = useNostr();
   const [name, setName] = useState(profile.name);
   const [about, setAbout] = useState(profile.about);
   const [avatar, setAvatar] = useState(profile.avatar);
-  const [status, setStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
+
+  const bgColor = useColorModeValue("gray.50", "gray.700");
+  const borderColor = useColorModeValue("gray.200", "gray.600");
+  const inputBg = useColorModeValue("white", "gray.800");
 
   useEffect(() => {
     setName(profile.name);
@@ -18,8 +40,14 @@ export const Profile = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     updateProfile(name, about, avatar);
-    setStatus("Profile updated successfully!");
-    setTimeout(() => setStatus(""), 3000);
+    toast({
+      title: "Profile updated",
+      description: "Your profile has been updated successfully!",
+      status: "success",
+      duration: 3000,
+      isClosable: true,
+      position: "bottom",
+    });
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,8 +56,14 @@ export const Profile = () => {
 
     // Check file size (limit to 2MB)
     if (file.size > 2 * 1024 * 1024) {
-      setStatus("error:Image is too large. Please select an image under 2MB.");
-      setTimeout(() => setStatus(""), 3000);
+      toast({
+        title: "File too large",
+        description: "Please select an image under 2MB.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+        position: "bottom",
+      });
       return;
     }
 
@@ -48,71 +82,130 @@ export const Profile = () => {
 
   if (!privateKey) {
     return (
-      <div className='profile'>
-        <h2>Profile</h2>
-        <p>Please add a key to manage your profile.</p>
-      </div>
+      <Box
+        bg={bgColor}
+        borderRadius='lg'
+        borderWidth='1px'
+        borderColor={borderColor}
+        p={6}
+        shadow='md'
+      >
+        <Heading size='md' mb={4} color='brand.500'>
+          Profile
+        </Heading>
+        <Text>Please add a key to manage your profile.</Text>
+      </Box>
     );
   }
 
   return (
-    <div className='profile'>
-      <h2>Profile</h2>
+    <Box
+      bg={bgColor}
+      borderRadius='lg'
+      borderWidth='1px'
+      borderColor={borderColor}
+      p={6}
+      shadow='md'
+    >
+      <Heading size='md' mb={6} color='brand.500'>
+        User Profile
+      </Heading>
+
       <form onSubmit={handleSubmit}>
-        <div
-          className={`avatar-preview ${!avatar ? "avatar-placeholder" : ""}`}
-          onClick={handleAvatarClick}
-        >
-          {avatar ? (
-            <img src={avatar} alt='Profile avatar' />
-          ) : (
-            <div className='avatar-upload-icon'>+</div>
-          )}
-        </div>
-        <p className='avatar-help-text'>Click the avatar to upload an image</p>
+        <VStack spacing={6} align='stretch'>
+          <Center flexDirection='column'>
+            <Box
+              position='relative'
+              cursor='pointer'
+              onClick={handleAvatarClick}
+              mb={2}
+            >
+              <Avatar
+                size='2xl'
+                src={avatar || undefined}
+                name={name || "User"}
+                bg='brand.500'
+                border='4px solid'
+                borderColor='brand.200'
+              />
+              <Flex
+                position='absolute'
+                bottom='0'
+                right='0'
+                bg='brand.500'
+                color='white'
+                borderRadius='full'
+                w='32px'
+                h='32px'
+                align='center'
+                justify='center'
+                border='2px solid'
+                borderColor={bgColor}
+              >
+                <Icon as={AddIcon} />
+              </Flex>
+            </Box>
+            <Text fontSize='sm' color='gray.500' mb={4}>
+              Click to upload a profile picture
+            </Text>
+          </Center>
 
-        <input
-          type='file'
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          accept='image/*'
-          style={{ display: "none" }}
-        />
-
-        <div className='form-group'>
-          <label htmlFor='name'>Name:</label>
-          <input
-            id='name'
-            type='text'
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder='Your name'
+          <Input
+            type='file'
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept='image/*'
+            display='none'
           />
-        </div>
 
-        <div className='form-group'>
-          <label htmlFor='about'>About:</label>
-          <textarea
-            id='about'
-            value={about}
-            onChange={(e) => setAbout(e.target.value)}
-            placeholder='Tell us about yourself'
-            rows={4}
-          />
-        </div>
+          <FormControl>
+            <FormLabel htmlFor='name' fontWeight='medium'>
+              Display Name
+            </FormLabel>
+            <Input
+              id='name'
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder='Your display name'
+              bg={inputBg}
+              borderColor={borderColor}
+              _focus={{
+                borderColor: "brand.500",
+                boxShadow: "0 0 0 1px var(--chakra-colors-brand-500)",
+              }}
+            />
+          </FormControl>
 
-        <button type='submit'>Update Profile</button>
+          <FormControl>
+            <FormLabel htmlFor='about' fontWeight='medium'>
+              About Me
+            </FormLabel>
+            <Textarea
+              id='about'
+              value={about}
+              onChange={(e) => setAbout(e.target.value)}
+              placeholder='Tell us about yourself'
+              rows={4}
+              bg={inputBg}
+              borderColor={borderColor}
+              _focus={{
+                borderColor: "brand.500",
+                boxShadow: "0 0 0 1px var(--chakra-colors-brand-500)",
+              }}
+            />
+          </FormControl>
+
+          <Button
+            type='submit'
+            colorScheme='brand'
+            size='lg'
+            height='50px'
+            mt={4}
+          >
+            Save Changes
+          </Button>
+        </VStack>
       </form>
-
-      {status && (
-        <p
-          className={`status ${
-            status.startsWith("error:") ? "error" : "success"
-          }`}
-        >
-          {status.startsWith("error:") ? status.substring(6) : status}
-        </p>
-      )}
-    </div>
+    </Box>
   );
 };
