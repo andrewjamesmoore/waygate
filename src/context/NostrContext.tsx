@@ -34,6 +34,10 @@ const RELAYS = [
   "wss://relay.damus.io",
   "wss://relay.nostr.band",
   "wss://nos.lol",
+  "wss://nostr.wine",
+  "wss://purplepag.es",
+  "wss://relay.snort.social",
+  "wss://eden.nostr.land",
 ];
 
 const pool = new SimplePool();
@@ -99,7 +103,7 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
       avatar: "",
     };
   });
-  const [posts, setPosts] = useState<Post[]>([]);
+  const [posts, setPosts] = useState<Post[]>([]); // Following-only posts
 
   // State for followed users
   const [following, setFollowing] = useState<string[]>(() => {
@@ -185,38 +189,40 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
     const authors = [publicKey, ...following];
 
     // Filter for posts (kind 1)
-    const postFilter: Filter = {
+    const postsFilter: Filter = {
       kinds: [1],
       authors: authors,
       limit: 100,
     };
 
-    // Filter for comments (kind 1 with e tag)
+    // Filter for comments
     const commentFilter: Filter = {
       kinds: [1],
       "#e": [], // Any e tag (reference to another event)
-      authors: authors,
+      since: Math.floor(Date.now() / 1000) - 24 * 60 * 60, // Last 24 hours
       limit: 100,
     };
 
     // Filter for profile metadata (kind 0)
     const metadataFilter: Filter = {
       kinds: [0],
-      authors: authors,
-      limit: authors.length,
+      since: Math.floor(Date.now() / 1000) - 7 * 24 * 60 * 60, // Last 7 days
+      limit: 100,
     };
 
-    console.log(`Subscribing to posts from ${authors.length} authors`);
-
-    // Subscribe to posts, comments, and metadata
+    // Subscribe to posts, comments, and metadata from relays
     const sub = pool.subscribeMany(
       RELAYS,
-      [postFilter, commentFilter, metadataFilter],
+      [postsFilter, commentFilter, metadataFilter],
       {
         onevent(event: Event) {
+          // Process events
           if (event.kind === 1) {
             // Handle post event
-            addPost(event as Post);
+            if (authors.includes(event.pubkey)) {
+              // Add to feed if from followed author
+              addPost(event as Post);
+            }
           } else if (event.kind === 0) {
             // Handle metadata event
             try {
@@ -257,6 +263,7 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
               }
             } catch (e) {
               console.error("Failed to parse profile metadata:", e);
+              // Don't let this error crash the app
             }
           }
         },
@@ -265,9 +272,16 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
 
     return () => {
       sub.close();
-      pool.close(RELAYS);
+      // Don't close the pool here as it's shared across subscriptions
     };
   }, [publicKey, following]);
+
+  // Cleanup pool when component unmounts
+  useEffect(() => {
+    return () => {
+      pool.close(RELAYS);
+    };
+  }, []);
 
   useEffect(() => {
     if (privateKey) {
@@ -474,6 +488,7 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
           }
         } catch (e) {
           console.log(`Failed to fetch from relay ${relay}:`, e);
+          // Continue to next relay
         }
       }
       if (events.length > 0) {
