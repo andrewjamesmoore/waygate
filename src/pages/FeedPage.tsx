@@ -4,7 +4,7 @@ import { PostNote } from "../components/PostNote";
 import { useNostr } from "../context/NostrContext";
 
 export const FeedPage = () => {
-  const { privateKey, posts } = useNostr();
+  const { privateKey, posts, profile } = useNostr();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,6 +20,20 @@ export const FeedPage = () => {
       <div className='posts-list'>
         {posts.map((post) => (
           <div key={post.id} className='post'>
+            <div className='post-header'>
+              {profile.avatar && (
+                <img
+                  src={profile.avatar}
+                  alt='Avatar'
+                  className='post-avatar'
+                />
+              )}
+              <div>
+                {profile.name && (
+                  <div className='post-author'>{profile.name}</div>
+                )}
+              </div>
+            </div>
             <div className='post-content'>{post.content}</div>
             <div className='post-meta'>
               {new Date(post.created_at * 1000).toLocaleString()}

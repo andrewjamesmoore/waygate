@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useNostr } from "../context/NostrContext";
 
 export const Navigation = () => {
-  const { privateKey, setPrivateKey } = useNostr();
+  const { privateKey, setPrivateKey, profile } = useNostr();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -33,6 +33,12 @@ export const Navigation = () => {
         >
           Settings
         </Link>
+        <div className='nav-user'>
+          {profile.avatar && (
+            <img src={profile.avatar} alt='Avatar' className='nav-avatar' />
+          )}
+          {profile.name && <span className='nav-username'>{profile.name}</span>}
+        </div>
         <button onClick={handleLogout} className='logout-button'>
           Logout
         </button>

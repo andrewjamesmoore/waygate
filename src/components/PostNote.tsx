@@ -19,7 +19,7 @@ const RELAYS = [
 ];
 
 export const PostNote = () => {
-  const { privateKey, publicKey, addPost } = useNostr();
+  const { privateKey, publicKey, addPost, profile } = useNostr();
   const [content, setContent] = useState("");
   const [status, setStatus] = useState("");
   const [isPosting, setIsPosting] = useState(false);
@@ -32,11 +32,26 @@ export const PostNote = () => {
     setStatus("Posting note...");
 
     try {
+      // Create metadata for the post
+      const metadata = {
+        name: profile.name || "",
+        about: profile.about || "",
+        picture: profile.avatar || "",
+      };
+
+      // For debugging
+      console.log("Posting with metadata:", metadata);
+
       const event: UnsignedEvent = {
         kind: 1,
         pubkey: publicKey,
         created_at: Math.floor(Date.now() / 1000),
-        tags: [],
+        tags: [
+          // Add profile reference tags according to NIP-08
+          ["p", publicKey, "", "mention"],
+          // Include metadata directly in the post
+          ["metadata", JSON.stringify(metadata)],
+        ],
         content: content.trim(),
       };
 
