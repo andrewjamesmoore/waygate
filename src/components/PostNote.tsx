@@ -58,17 +58,41 @@ export const PostNote = () => {
       const signedEvent = finalizeEvent(event, hexToBytes(privateKey));
 
       const pubs = pool.publish(RELAYS, signedEvent);
-      await Promise.all(pubs);
+      const results = await Promise.allSettled(pubs);
 
-      // Add the post to the local state immediately
-      addPost(signedEvent);
+      // Check if at least one relay accepted the event
+      const successCount = results.filter(
+        (r) => r.status === "fulfilled"
+      ).length;
 
-      setContent("");
-      setStatus("Note posted successfully!");
-      setTimeout(() => setStatus(""), 3000);
+      // Log results for debugging
+      console.log(
+        "Post publication results:",
+        results
+          .map((r) => (r.status === "fulfilled" ? "success" : "failed"))
+          .join(", ")
+      );
+
+      if (successCount > 0) {
+        console.log(
+          `Post published successfully to ${successCount}/${RELAYS.length} relays`
+        );
+
+        // Add the post to the local state immediately
+        addPost(signedEvent);
+
+        setContent("");
+        setStatus("Note posted successfully!");
+        setTimeout(() => setStatus(""), 3000);
+      } else {
+        console.error("Failed to publish post to any relay");
+        setStatus("Failed to post note. Please try again.");
+      }
     } catch (error: unknown) {
       console.error("Failed to post note:", error);
-      setStatus("Failed to post note. Please try again.");
+      setStatus(
+        "Failed to post note. Please check your connection and try again."
+      );
     } finally {
       setIsPosting(false);
     }
