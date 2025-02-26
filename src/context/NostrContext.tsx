@@ -42,6 +42,7 @@ interface Post extends Event {
   content: string;
   created_at: number;
   pubkey: string;
+  comments?: Post[]; // Array of comments for this post
 }
 
 interface NostrContextType {
@@ -58,6 +59,16 @@ interface NostrContextType {
   updateProfile: (name: string, about: string, avatar: string) => void;
   posts: Post[];
   addPost: (post: Post) => void;
+  addComment: (comment: Post, parentId: string) => void;
+  following: string[]; // Array of pubkeys that the user is following
+  followUser: (pubkey: string) => void;
+  unfollowUser: (pubkey: string) => void;
+  isFollowing: (pubkey: string) => boolean;
+  getProfileByPubkey: (pubkey: string) => Promise<{
+    name: string;
+    about: string;
+    picture: string;
+  } | null>;
 }
 
 const NostrContext = createContext<NostrContextType | null>(null);
@@ -90,73 +101,173 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
   });
   const [posts, setPosts] = useState<Post[]>([]);
 
+  // State for followed users
+  const [following, setFollowing] = useState<string[]>(() => {
+    // Load followed users from localStorage
+    const stored = localStorage.getItem("nostr_private_key");
+    if (stored) {
+      const followingKey = `nostr_following_${stored}`;
+      const storedFollowing = localStorage.getItem(followingKey);
+      if (storedFollowing) {
+        return JSON.parse(storedFollowing);
+      }
+    }
+    return [];
+  });
+
+  // Cache for profiles
+  const [profileCache, setProfileCache] = useState<
+    Record<
+      string,
+      {
+        name: string;
+        about: string;
+        picture: string;
+        lastFetched: number;
+      }
+    >
+  >({});
+
   const addPost = (post: Post) => {
+    // Check if this is a reply to another post
+    const replyToTag = post.tags?.find((tag) => tag[0] === "e");
+
+    if (replyToTag) {
+      // This is a comment/reply
+      const parentId = replyToTag[1];
+      addComment(post, parentId);
+    } else {
+      // This is a top-level post
+      setPosts((prev) => {
+        if (prev.some((p) => p.id === post.id)) return prev;
+        return [post, ...prev].sort((a, b) => b.created_at - a.created_at);
+      });
+    }
+  };
+
+  const addComment = (comment: Post, parentId: string) => {
     setPosts((prev) => {
-      if (prev.some((p) => p.id === post.id)) return prev;
-      return [post, ...prev].sort((a, b) => b.created_at - a.created_at);
+      // Find the parent post
+      const updatedPosts = [...prev];
+      const parentIndex = updatedPosts.findIndex((p) => p.id === parentId);
+
+      if (parentIndex !== -1) {
+        // Parent post found
+        const parentPost = updatedPosts[parentIndex];
+
+        // Initialize comments array if it doesn't exist
+        if (!parentPost.comments) {
+          parentPost.comments = [];
+        }
+
+        // Add comment if it doesn't already exist
+        if (!parentPost.comments.some((c) => c.id === comment.id)) {
+          parentPost.comments = [...parentPost.comments, comment].sort(
+            (a, b) => a.created_at - b.created_at
+          ); // Sort comments chronologically
+
+          // Update the parent post
+          updatedPosts[parentIndex] = parentPost;
+        }
+
+        return updatedPosts;
+      }
+
+      return prev;
     });
   };
 
-  // Subscribe to posts and profile metadata
+  // Subscribe to posts, comments, and profile metadata
   useEffect(() => {
     if (!publicKey) return;
+
+    // Combine the user's pubkey with followed pubkeys
+    const authors = [publicKey, ...following];
 
     // Filter for posts (kind 1)
     const postFilter: Filter = {
       kinds: [1],
-      authors: [publicKey],
-      limit: 20,
+      authors: authors,
+      limit: 100,
+    };
+
+    // Filter for comments (kind 1 with e tag)
+    const commentFilter: Filter = {
+      kinds: [1],
+      "#e": [], // Any e tag (reference to another event)
+      authors: authors,
+      limit: 100,
     };
 
     // Filter for profile metadata (kind 0)
     const metadataFilter: Filter = {
       kinds: [0],
-      authors: [publicKey],
-      limit: 1,
+      authors: authors,
+      limit: authors.length,
     };
 
-    // Subscribe to posts and metadata
-    const sub = pool.subscribeMany(RELAYS, [postFilter, metadataFilter], {
-      onevent(event: Event) {
-        if (event.kind === 1) {
-          // Handle post event
-          addPost(event as Post);
-        } else if (event.kind === 0) {
-          // Handle metadata event
-          try {
-            const metadata = JSON.parse(event.content);
-            if (metadata) {
-              setProfile({
-                name: metadata.name || "",
-                about: metadata.about || "",
-                avatar: metadata.picture || "",
-              });
+    console.log(`Subscribing to posts from ${authors.length} authors`);
 
-              // Save to localStorage
-              if (privateKey) {
-                const profileKey = `nostr_profile_${privateKey}`;
-                localStorage.setItem(
-                  profileKey,
-                  JSON.stringify({
+    // Subscribe to posts, comments, and metadata
+    const sub = pool.subscribeMany(
+      RELAYS,
+      [postFilter, commentFilter, metadataFilter],
+      {
+        onevent(event: Event) {
+          if (event.kind === 1) {
+            // Handle post event
+            addPost(event as Post);
+          } else if (event.kind === 0) {
+            // Handle metadata event
+            try {
+              const metadata = JSON.parse(event.content);
+              if (metadata) {
+                // If this is the user's own metadata
+                if (event.pubkey === publicKey) {
+                  setProfile({
                     name: metadata.name || "",
                     about: metadata.about || "",
                     avatar: metadata.picture || "",
-                  })
-                );
+                  });
+
+                  // Save to localStorage
+                  if (privateKey) {
+                    const profileKey = `nostr_profile_${privateKey}`;
+                    localStorage.setItem(
+                      profileKey,
+                      JSON.stringify({
+                        name: metadata.name || "",
+                        about: metadata.about || "",
+                        avatar: metadata.picture || "",
+                      })
+                    );
+                  }
+                }
+
+                // Cache the profile data
+                setProfileCache((prev) => ({
+                  ...prev,
+                  [event.pubkey]: {
+                    name: metadata.name || "",
+                    about: metadata.about || "",
+                    picture: metadata.picture || "",
+                    lastFetched: Date.now(),
+                  },
+                }));
               }
+            } catch (e) {
+              console.error("Failed to parse profile metadata:", e);
             }
-          } catch (e) {
-            console.error("Failed to parse profile metadata:", e);
           }
-        }
-      },
-    });
+        },
+      }
+    );
 
     return () => {
       sub.close();
       pool.close(RELAYS);
     };
-  }, [publicKey]);
+  }, [publicKey, following]);
 
   useEffect(() => {
     if (privateKey) {
@@ -296,6 +407,102 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // Function to follow a user
+  const followUser = (pubkey: string) => {
+    if (following.includes(pubkey)) return; // Already following
+
+    const newFollowing = [...following, pubkey];
+    setFollowing(newFollowing);
+
+    // Save to localStorage
+    if (privateKey) {
+      const followingKey = `nostr_following_${privateKey}`;
+      localStorage.setItem(followingKey, JSON.stringify(newFollowing));
+    }
+
+    console.log(`Now following ${pubkey}`);
+  };
+
+  // Function to unfollow a user
+  const unfollowUser = (pubkey: string) => {
+    const newFollowing = following.filter((p) => p !== pubkey);
+    setFollowing(newFollowing);
+
+    // Save to localStorage
+    if (privateKey) {
+      const followingKey = `nostr_following_${privateKey}`;
+      localStorage.setItem(followingKey, JSON.stringify(newFollowing));
+    }
+
+    console.log(`Unfollowed ${pubkey}`);
+  };
+
+  // Function to check if following a user
+  const isFollowing = (pubkey: string) => {
+    return following.includes(pubkey);
+  };
+
+  // Function to get a profile by pubkey
+  const getProfileByPubkey = async (pubkey: string) => {
+    // Check cache first
+    const cached = profileCache[pubkey];
+    if (cached && Date.now() - cached.lastFetched < 1000 * 60 * 5) {
+      // 5 minute cache
+      return {
+        name: cached.name,
+        about: cached.about,
+        picture: cached.picture,
+      };
+    }
+
+    // Not in cache, fetch from network
+    try {
+      const filter: Filter = {
+        kinds: [0],
+        authors: [pubkey],
+        limit: 1,
+      };
+
+      // Query each relay individually and combine results
+      const events: Event[] = [];
+      for (const relay of RELAYS) {
+        try {
+          const event = await pool.get([relay], filter);
+          if (event) {
+            events.push(event);
+            break; // We only need one valid metadata event
+          }
+        } catch (e) {
+          console.log(`Failed to fetch from relay ${relay}:`, e);
+        }
+      }
+      if (events.length > 0) {
+        const metadata = JSON.parse(events[0].content);
+
+        // Update cache
+        setProfileCache((prev) => ({
+          ...prev,
+          [pubkey]: {
+            name: metadata.name || "",
+            about: metadata.about || "",
+            picture: metadata.picture || "",
+            lastFetched: Date.now(),
+          },
+        }));
+
+        return {
+          name: metadata.name || "",
+          about: metadata.about || "",
+          picture: metadata.picture || "",
+        };
+      }
+    } catch (error) {
+      console.error(`Failed to fetch profile for ${pubkey}:`, error);
+    }
+
+    return null;
+  };
+
   return (
     <NostrContext.Provider
       value={{
@@ -308,6 +515,12 @@ export const NostrProvider = ({ children }: { children: ReactNode }) => {
         updateProfile,
         posts,
         addPost,
+        addComment,
+        following,
+        followUser,
+        unfollowUser,
+        isFollowing,
+        getProfileByPubkey,
       }}
     >
       {children}
